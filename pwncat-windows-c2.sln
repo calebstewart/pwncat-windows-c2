@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "loader", "loader\loader.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "stagetwo", "stagetwo\stagetwo.csproj", "{959BFCC0-F9EB-4D79-BB01-21C3E9B9F279}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "testing", "testing\testing.csproj", "{3B590330-847F-44F0-933A-FF55081C54D1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{959BFCC0-F9EB-4D79-BB01-21C3E9B9F279}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{959BFCC0-F9EB-4D79-BB01-21C3E9B9F279}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{959BFCC0-F9EB-4D79-BB01-21C3E9B9F279}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3B590330-847F-44F0-933A-FF55081C54D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B590330-847F-44F0-933A-FF55081C54D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B590330-847F-44F0-933A-FF55081C54D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B590330-847F-44F0-933A-FF55081C54D1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

