@@ -98,7 +98,7 @@ namespace stagetwo
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool CancelSynchronousIo(IntPtr hThread);
+        private static extern bool CancelIoEx(IntPtr hFile, IntPtr lpOverlapped);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -210,7 +210,7 @@ namespace stagetwo
             IntPtr hStdIn = GetStdHandle(STD_INPUT_HANDLE);
             stdin_stream = new System.IO.FileStream(hStdIn, FileAccess.Read, false);
             stdin = new System.IO.StreamReader(stdin_stream);
-            bad_stdin = true;
+            bad_stdin = false; // GetFileType(hStdIn) != 0x0003;
 
             System.Console.WriteLine("READY");
 
@@ -594,15 +594,6 @@ namespace stagetwo
             return processInfo;
         }
 
-        private void fix_stdin()
-        {
-            if (!bad_stdin) return;
-
-            IntPtr hStdIn = GetStdHandle(STD_INPUT_HANDLE);
-            stdin_stream = new System.IO.FileStream(hStdIn, FileAccess.Read, false);
-            stdin = new System.IO.StreamReader(stdin_stream);
-        }
-
         private bool SpawnConPtyShell(uint rows, uint cols, string commandLine)
         {
             IntPtr InputPipeRead = new IntPtr(0);
@@ -616,17 +607,10 @@ namespace stagetwo
             bool newConsoleAllocated = false;
             PROCESS_INFORMATION childProcessInfo = new PROCESS_INFORMATION();
 
-            if( bad_stdin)
-            {
-                stdin.Close();
-                stdin_stream.Close();
-            }
-
             CreatePipes(ref InputPipeRead, ref InputPipeWrite, ref OutputPipeRead, ref OutputPipeWrite);
             InitConsole(ref oldStdIn, ref oldStdOut, ref oldStdErr);
-            if (GetProcAddress(GetModuleHandle("kernel32"), "CreatePseudoConsole") == IntPtr.Zero)
+            if ( GetProcAddress(GetModuleHandle("kernel32"), "CreatePseudoConsole") == IntPtr.Zero)
             {
-                Console.WriteLine("\r\nCreatePseudoConsole function not found! Spawning a netcat-like interactive shell...\r\n");
                 STARTUPINFO sInfo = new STARTUPINFO();
                 sInfo.cb = Marshal.SizeOf(sInfo);
                 sInfo.dwFlags |= (Int32)STARTF_USESTDHANDLES;
@@ -646,7 +630,6 @@ namespace stagetwo
                 int pseudoConsoleCreationResult = CreatePseudoConsoleWithPipes(ref handlePseudoConsole, ref InputPipeRead, ref OutputPipeWrite, rows, cols);
                 if (pseudoConsoleCreationResult != 0)
                 {
-                    fix_stdin();
                     Console.WriteLine("E:CREATE_PTY");
                     return false;
                 }
@@ -660,14 +643,17 @@ namespace stagetwo
             //Threads have better performance than Tasks
             Thread thThreadReadPipeWriteSocket = null;
             Thread thReadSocketWritePipe = null;
+
             thThreadReadPipeWriteSocket = new Thread(pipe_thread);
             thReadSocketWritePipe = new Thread(pipe_thread);
+            thReadSocketWritePipe.Start(new object[] { OutputPipeRead, oldStdOut, "stdout", oldStdIn });
             thThreadReadPipeWriteSocket.Start(new object[] { oldStdIn, InputPipeWrite, "stdin" });
-            thReadSocketWritePipe.Start(new object[] { OutputPipeRead, oldStdOut, "stdout" });
+
             WaitForSingleObject(childProcessInfo.hProcess, INFINITE);
             //cleanup everything
             thThreadReadPipeWriteSocket.Abort();
             thReadSocketWritePipe.Abort();
+
             RestoreStdHandles(oldStdIn, oldStdOut, oldStdErr);
             if (newConsoleAllocated)
                 FreeConsole();
@@ -676,7 +662,6 @@ namespace stagetwo
             if (handlePseudoConsole != IntPtr.Zero) ClosePseudoConsole(handlePseudoConsole);
             if (InputPipeWrite != IntPtr.Zero) CloseHandle(InputPipeWrite);
             if (OutputPipeRead != IntPtr.Zero) CloseHandle(OutputPipeRead);
-            fix_stdin();
             return true;
         }
 
@@ -688,7 +673,7 @@ namespace stagetwo
             String name = (String)parms[2];
             uint bufsz = 16 * 1024;
             byte[] bytes = new byte[bufsz];
-            bool read_success = false;
+            bool read_success = false, write_success = true;
             uint nsent = 0;
             uint nread = 0;
 
@@ -697,9 +682,18 @@ namespace stagetwo
                 do
                 {
                     read_success = ReadFile(read, bytes, bufsz, out nread, IntPtr.Zero);
-                    WriteFile(write, bytes, nread, out nsent, IntPtr.Zero);
-                    FlushFileBuffers(write);
-                } while (nsent > 0 && read_success);
+                    if (!read_success) System.Threading.Thread.Sleep(100);
+                    if (nread != 0 && read_success)
+                    {
+                        if( name == "stdout")
+                        {
+                            CancelIoEx((IntPtr)parms[3], IntPtr.Zero);
+                        }
+                        write_success = WriteFile(write, bytes, nread, out nsent, IntPtr.Zero);
+                        FlushFileBuffers(write);
+                    }
+                    else write_success = true;
+                } while (write_success);
             }
             finally
             {
