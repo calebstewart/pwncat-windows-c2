@@ -5,10 +5,11 @@ using System.Threading;
 using System.Runtime.InteropServices;
 using System.Management.Automation.Runspaces;
 using System.Management.Automation;
+using System.Collections.ObjectModel;
+
 
 namespace stagetwo
 {
-
     public class StageTwo
     {
 
@@ -438,11 +439,12 @@ namespace stagetwo
             PowerShell ps = PowerShell.Create();
             ps.Runspace = rs;
 
-            ps.AddScript(script.ToString());
-            var result = ps.Invoke();
+            ps.AddScript(System.Text.Encoding.UTF8.GetString(script.ToArray()));
+
+            Collection<PSObject> results = ps.Invoke();
             rs.Close();
 
-            foreach( var item in result)
+            foreach( var item in results)
             {
                 System.Console.WriteLine(item.ToString());
             }
