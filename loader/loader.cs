@@ -44,7 +44,7 @@ namespace loader
 			catch (Exception e)
 			{
 				System.Console.WriteLine("E:LDR:EXCEPTION:" + e.Message);
-				System.Console.Write(e.StackTrace);
+				System.Console.Write(e.ToString());
 			}
 		}
 	}
