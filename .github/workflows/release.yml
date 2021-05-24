@@ -26,7 +26,7 @@ jobs:
           rm -f stageone.dll stagetwo.dll
 
       - name: Publish
-        uses: softprops/actions-gh-release@v1
+        uses: softprops/action-gh-release@v1
         with:
           files: "pwncat-windows-*.tar.gz"
         env:
