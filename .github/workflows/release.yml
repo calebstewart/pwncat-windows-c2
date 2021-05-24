@@ -19,8 +19,8 @@ jobs:
           
           msbuild.exe /property:Configuration=Debug pwncat-windows-c2.sln
           
-          cp loader/bin/Release/loader.dll "stageone.dll"
-          cp stagetwo/bin/Release/stagetwo.dll "stagetwo.dll"
+          cp loader/bin/Debug/loader.dll "stageone.dll"
+          cp stagetwo/bin/Debug/stagetwo.dll "stagetwo.dll"
           tar czvf "pwncat-windows-$tag.tar.gz" "stageone.dll" "stagetwo.dll"
 
           rm -f stageone.dll stagetwo.dll
