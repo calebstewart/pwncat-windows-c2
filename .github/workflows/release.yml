@@ -17,7 +17,7 @@ jobs:
         run: |
           tag=$(git describe --tags --abbrev=0)
           
-          msbuild.exe /property:Configuration=Release pwncat-windows-c2.sln
+          msbuild.exe /property:Configuration=Debug pwncat-windows-c2.sln
           
           cp loader/bin/Release/loader.dll "stageone.dll"
           cp stagetwo/bin/Release/stagetwo.dll "stagetwo.dll"
