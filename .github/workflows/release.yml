@@ -15,7 +15,7 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          tag=$(git describe --tags --abrev=0)
+          tag=$(git describe --tags --abbrev=0)
           
           msbuild /property:Configuration=Release pwncat-windows-c2.sln
           
