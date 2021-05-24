@@ -39,7 +39,7 @@ namespace loader
 				gz.CopyTo(output_ms);
 				var assembly = System.Reflection.Assembly.Load(output_ms.ToArray());
 				var stagetwo = assembly.CreateInstance("stagetwo.StageTwo");
-				stagetwo.GetType().GetMethod("main").Invoke(stagetwo, new object[] { });
+				stagetwo.GetType().GetMethod("main").Invoke(stagetwo, new object[] { this.GetType().Assembly.Location });
 			}
 			catch (Exception e)
 			{
