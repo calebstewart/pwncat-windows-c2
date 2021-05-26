@@ -104,10 +104,11 @@ namespace stagetwo
             System.Console.WriteLine(BuildResponse(new string[] { reader.ReadLine() }, null));
         }
 
-        public void main(object oPath)
+        public void main(object oPath, object oStdin)
         {
-            object[] args = new object[] { };
             string path = (string)oPath;
+            System.IO.StreamReader stdin = (System.IO.StreamReader)oStdin;
+            object[] args = new object[] { stdin };
 
             // Initialize ConsoleHost and PowerShell Runspace
             PowerShell.init_pshost();
@@ -122,8 +123,8 @@ namespace stagetwo
             {
                 try
                 {
-                    String type = System.Console.ReadLine();
-                    String method_name = System.Console.ReadLine();
+                    String type = stdin.ReadLine();
+                    String method_name = stdin.ReadLine();
 
                     if ( type == null || method_name == null ) {
                         break;
@@ -169,7 +170,7 @@ namespace stagetwo
         public static void Main(string[] args)
         {
             var x = new StageTwo();
-            x.main("");
+            // x.main("");
         }
 
     }

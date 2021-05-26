@@ -11,10 +11,10 @@ namespace stagetwo
     class File
     {
 
-        public static void open()
+        public static void open(System.IO.StreamReader stdin)
         {
-            System.String filename = System.Console.ReadLine();
-            System.String mode = System.Console.ReadLine();
+            System.String filename = stdin.ReadLine();
+            System.String mode = stdin.ReadLine();
             uint desired_access = 0;
             uint creation_disposition = Win32.OPEN_EXISTING;
             IntPtr handle;
@@ -26,7 +26,7 @@ namespace stagetwo
             if (mode.Contains("w"))
             {
                 desired_access |= Win32.GENERIC_WRITE;
-                creation_disposition = Win32.TRUNCATE_EXISTING;
+                creation_disposition = Win32.CREATE_ALWAYS;
             }
 
             handle = Win32.CreateFile(filename, desired_access, 0, IntPtr.Zero, creation_disposition, Win32.FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
@@ -42,16 +42,16 @@ namespace stagetwo
             System.Console.WriteLine(handle);
         }
 
-        public static void read()
+        public static void read(System.IO.StreamReader stdin)
         {
             System.String line;
             IntPtr handle;
             uint count;
             uint nreceived;
 
-            line = System.Console.ReadLine();
+            line = stdin.ReadLine();
             handle = new IntPtr(System.UInt32.Parse(line));
-            line = System.Console.ReadLine();
+            line = stdin.ReadLine();
             count = System.UInt32.Parse(line);
 
             byte[] buffer = new byte[count];
@@ -72,19 +72,19 @@ namespace stagetwo
             return;
         }
 
-        public static void write()
+        public static void write(System.IO.StreamReader stdin)
         {
             System.String line;
             IntPtr handle;
             uint nwritten;
             System.IO.MemoryStream script;
 
-            line = System.Console.ReadLine();
+            line = stdin.ReadLine();
             handle = new IntPtr(System.UInt32.Parse(line));
 
             try
             {
-                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(System.Console.ReadLine()));
+                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(stdin.ReadLine()));
                 var gz = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
                 script = new System.IO.MemoryStream();
                 gz.CopyTo(script);
@@ -105,9 +105,9 @@ namespace stagetwo
             return;
         }
 
-        public static void close()
+        public static void close(System.IO.StreamReader stdin)
         {
-            IntPtr handle = new IntPtr(System.UInt32.Parse(System.Console.ReadLine()));
+            IntPtr handle = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
             Win32.CloseHandle(handle);
         }
 

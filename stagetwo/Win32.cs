@@ -28,6 +28,7 @@ namespace stagetwo
         public const uint OPEN_EXISTING = 3;
         public const uint OPEN_ALWAYS = 4;
         public const uint TRUNCATE_EXISTING = 5;
+        public const uint CREATE_ALWAYS = 4;
         public const int STD_INPUT_HANDLE = -10;
         public const int STD_OUTPUT_HANDLE = -11;
         public const int STD_ERROR_HANDLE = -12;

@@ -19,18 +19,18 @@ namespace stagetwo
         public static object pshost;
         public static Runspace runspace;
 
-        public static void run()
+        public static void run(System.IO.StreamReader stdin)
         {
             System.IO.MemoryStream script;
             UInt32 depth;
             try
             {
-                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(System.Console.ReadLine()));
+                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(stdin.ReadLine()));
                 var gz = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
                 script = new System.IO.MemoryStream();
                 gz.CopyTo(script);
 
-                depth = System.UInt32.Parse(System.Console.ReadLine());
+                depth = System.UInt32.Parse(stdin.ReadLine());
             }
             catch (Exception)
             {
@@ -189,8 +189,10 @@ namespace stagetwo
 
             return;
         }
-        public static void start()
+        public static void start(System.IO.StreamReader stdin)
         {
+
+            System.Console.WriteLine("INTERACTIVE_START");
 
             // Enter the shell
             ConsoleHost.GetMethod("EnterNestedPrompt").Invoke(pshost, new object[] { });

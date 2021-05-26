@@ -5,7 +5,7 @@ namespace stagetwo
 {
     class Process
     {
-        public static void start()
+        public static void start(System.IO.StreamReader stdin)
         {
             IntPtr stdin_read, stdin_write;
             IntPtr stdout_read, stdout_write;
@@ -13,7 +13,7 @@ namespace stagetwo
             Win32.SECURITY_ATTRIBUTES pSec = new Win32.SECURITY_ATTRIBUTES();
             Win32.STARTUPINFO pInfo = new Win32.STARTUPINFO();
             Win32.PROCESS_INFORMATION childInfo = new Win32.PROCESS_INFORMATION();
-            System.String command = System.Console.ReadLine();
+            System.String command = stdin.ReadLine();
 
             pSec.nLength = Marshal.SizeOf(pSec);
             pSec.bInheritHandle = 1;
@@ -59,9 +59,9 @@ namespace stagetwo
             System.Console.WriteLine(stderr_read);
         }
 
-        public static void poll()
+        public static void poll(System.IO.StreamReader stdin)
         {
-            IntPtr hProcess = new IntPtr(System.UInt32.Parse(System.Console.ReadLine()));
+            IntPtr hProcess = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
             System.UInt32 result = Win32.WaitForSingleObject(hProcess, 0);
 
             if (result == 0x00000102L)
@@ -83,10 +83,10 @@ namespace stagetwo
             System.Console.WriteLine(result);
         }
 
-        public static void kill()
+        public static void kill(System.IO.StreamReader stdin)
         {
-            IntPtr hProcess = new IntPtr(System.UInt32.Parse(System.Console.ReadLine()));
-            UInt32 code = System.UInt32.Parse(System.Console.ReadLine());
+            IntPtr hProcess = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
+            UInt32 code = System.UInt32.Parse(stdin.ReadLine());
             Win32.TerminateProcess(hProcess, code);
         }
 

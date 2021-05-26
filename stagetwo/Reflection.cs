@@ -2,7 +2,7 @@
 {
     class Reflection
     {
-        public void compile()
+        public void compile(System.IO.StreamReader stdin)
         {
             var cp = new System.CodeDom.Compiler.CompilerParameters()
             {
@@ -12,7 +12,7 @@
 
             while (true)
             {
-                System.String line = System.Console.ReadLine();
+                System.String line = stdin.ReadLine();
                 if (line == "/* ENDASM */") break;
                 cp.ReferencedAssemblies.Add(line);
             }
