@@ -38,6 +38,8 @@ namespace stagetwo
                 return;
             }
 
+            System.Console.WriteLine("START");
+
             System.Management.Automation.PowerShell ps = System.Management.Automation.PowerShell.Create();
             ps.Runspace = runspace;
 
@@ -46,6 +48,8 @@ namespace stagetwo
             ps.AddScript(System.Text.Encoding.UTF8.GetString(script.ToArray()));
             ps.AddCommand("ConvertTo-Json").AddParameter("Depth", depth).AddParameter("Compress");
             Collection<PSObject> results = ps.Invoke();
+
+            System.Console.WriteLine("DONE");
 
             if (ps.HadErrors)
             {
