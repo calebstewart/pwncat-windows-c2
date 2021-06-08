@@ -74,6 +74,13 @@ namespace stagetwo
                 System.Console.WriteLine(item.ToString());
             }
             System.Console.WriteLine("END");
+
+            // Match our CWD w/ powershell
+            System.Management.Automation.PowerShell ps2 = System.Management.Automation.PowerShell.Create();
+            ps2.Runspace = runspace;
+            Runspace.DefaultRunspace = runspace;
+            ps2.AddScript("[System.IO.Directory]::SetCurrentDirectory($ExecutionContext.SessionState.Path.CurrentFileSystemLocation)");
+            ps2.Invoke();
         }
 
         public static void init_pshost()
@@ -206,6 +213,13 @@ namespace stagetwo
             ConsoleHost.GetProperty("ShouldEndSession", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(pshost, false);
 
             System.Console.WriteLine("\nINTERACTIVE_COMPLETE");
+
+            // Match our CWD w/ powershell
+            System.Management.Automation.PowerShell ps2 = System.Management.Automation.PowerShell.Create();
+            ps2.Runspace = runspace;
+            Runspace.DefaultRunspace = runspace;
+            ps2.AddScript("[System.IO.Directory]::SetCurrentDirectory($ExecutionContext.SessionState.Path.CurrentFileSystemLocation)");
+            ps2.Invoke();
 
         }
     }
