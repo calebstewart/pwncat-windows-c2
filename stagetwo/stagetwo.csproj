@@ -34,6 +34,7 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Net" />
@@ -49,6 +50,7 @@
     <Reference Include="Microsoft.PowerShell.ConsoleHost" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Protocol.cs" />
     <Compile Include="Reflection.cs" />
     <Compile Include="PowerShell.cs" />
     <Compile Include="Process.cs" />
