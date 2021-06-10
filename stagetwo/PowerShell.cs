@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
+using static stagetwo.Protocol;
 
 namespace stagetwo
 {
@@ -19,61 +20,26 @@ namespace stagetwo
         public static object pshost;
         public static Runspace runspace;
 
-        public static void run(System.IO.StreamReader stdin)
+        public static Dictionary<string, object> run(string script, Int64 depth)
         {
-            System.IO.MemoryStream script;
-            UInt32 depth;
-            try
-            {
-                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(stdin.ReadLine()));
-                var gz = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
-                script = new System.IO.MemoryStream();
-                gz.CopyTo(script);
-
-                depth = System.UInt32.Parse(stdin.ReadLine());
-            }
-            catch (Exception)
-            {
-                System.Console.WriteLine("E:DECODE");
-                return;
-            }
-
-            System.Console.WriteLine("START");
-
             System.Management.Automation.PowerShell ps = System.Management.Automation.PowerShell.Create();
-            ps.Runspace = runspace;
 
+            // Setup the powershell runspace
+            ps.Runspace = runspace;
             Runspace.DefaultRunspace = runspace;
 
-            ps.AddScript(System.Text.Encoding.UTF8.GetString(script.ToArray()));
+            // Add the script
+            ps.AddScript(script);
             ps.AddCommand("ConvertTo-Json").AddParameter("Depth", depth).AddParameter("Compress");
+
+            // Execute the script
             Collection<PSObject> results = ps.Invoke();
 
-            System.Console.WriteLine("DONE");
-
+            // Check for and serialize an error
             if (ps.HadErrors)
             {
-                var errors = new List<Dictionary<string, string>>();
-                var serializer = new JavaScriptSerializer();
-
-                foreach (var error in ps.Streams.Error)
-                {
-                    errors.Add(new Dictionary<string, string>
-                    {
-                        { "ErrorID", error.FullyQualifiedErrorId },
-                        { "Message", error.Exception.Message }
-                    });
-                }
-
-                System.Console.WriteLine("E:PWSH:" + serializer.Serialize(errors));
-                return;
+                throw new ProtocolError(-1, ps.Streams.Error[0].Exception.Message);
             }
-
-            foreach (var item in results)
-            {
-                System.Console.WriteLine(item.ToString());
-            }
-            System.Console.WriteLine("END");
 
             // Match our CWD w/ powershell
             System.Management.Automation.PowerShell ps2 = System.Management.Automation.PowerShell.Create();
@@ -81,6 +47,18 @@ namespace stagetwo
             Runspace.DefaultRunspace = runspace;
             ps2.AddScript("[System.IO.Directory]::SetCurrentDirectory($ExecutionContext.SessionState.Path.CurrentFileSystemLocation)");
             ps2.Invoke();
+
+            Dictionary<string, object> output = new Dictionary<string, object>()
+            {
+                { "output", new List<string>() }
+            };
+
+            foreach (var item in results)
+            {
+                ((List<string>)output["output"]).Add(item.ToString());
+            }
+
+            return output;
         }
 
         public static void init_pshost()
@@ -200,18 +178,20 @@ namespace stagetwo
 
             return;
         }
-        public static void start(System.IO.StreamReader stdin)
+        public static Dictionary<string, object> start()
         {
 
+            // We need to be explicit that we got this far.
             System.Console.WriteLine("INTERACTIVE_START");
 
             // Enter the shell
             ConsoleHost.GetMethod("EnterNestedPrompt").Invoke(pshost, new object[] { });
 
             // This ensures that we won't immediately exit next time we enter a prompt
-            // with the same Runspace/ConsoleHOst
+            // with the same Runspace/ConsoleHost
             ConsoleHost.GetProperty("ShouldEndSession", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(pshost, false);
 
+            // Let pwncat know we exited the shell
             System.Console.WriteLine("\nINTERACTIVE_COMPLETE");
 
             // Match our CWD w/ powershell
@@ -221,6 +201,7 @@ namespace stagetwo
             ps2.AddScript("[System.IO.Directory]::SetCurrentDirectory($ExecutionContext.SessionState.Path.CurrentFileSystemLocation)");
             ps2.Invoke();
 
+            return new Dictionary<string, object>() { };
         }
     }
 }

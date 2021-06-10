@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using System.Text;
-using Newtonsoft.Json;
+using System.Web.Script.Serialization;
 
 namespace stagetwo
 {
@@ -28,10 +29,12 @@ namespace stagetwo
         }
 
         StreamReader stdin;
+        JavaScriptSerializer serializer;
 
         public Protocol(StreamReader stdin)
         {
             this.stdin = stdin;
+            this.serializer = new JavaScriptSerializer();
         }
 
         public List<object> ReceiveCommand()
@@ -51,7 +54,8 @@ namespace stagetwo
                 gz.CopyTo(stream);
 
                 // Decode the command array
-                command = JsonConvert.DeserializeObject<List<object>>(Encoding.UTF8.GetString(stream.ToArray()));
+
+                command = serializer.Deserialize<List<object>>(Encoding.UTF8.GetString(stream.ToArray()));
 
                 return command;
             }
@@ -64,14 +68,16 @@ namespace stagetwo
         public void SendResponse(Dictionary<string, object> response)
         {
             // Serialize the response object
-            byte[] serialized = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(response));
+            byte[] serialized = Encoding.UTF8.GetBytes(serializer.Serialize(response));
 
             // Create the raw output stream and a gzip compressor
             var raw_stream = new MemoryStream();
-            var gz = new GZipStream(raw_stream, CompressionMode.Compress);
 
-            // Compress the serialized object
-            gz.Write(serialized, 0, serialized.Length);
+            using (var gz = new GZipStream(raw_stream, CompressionMode.Compress))
+            {
+                // Compress the serialized object
+                gz.Write(serialized, 0, serialized.Length);
+            }
 
             // Write a base64-encoded string
             Console.WriteLine(Convert.ToBase64String(raw_stream.ToArray()));
@@ -106,20 +112,31 @@ namespace stagetwo
                         { "result", result }
                     });
                 }
-                catch (LoopExit)
-                {
-                    running = false;
-                }
-                catch (ProtocolError e)
-                {
-                    SendResponse(new Dictionary<string, object>
-                    {
-                        { "error", e.code },
-                        { "message", e.message }
-                    });
-                }
                 catch (Exception e)
                 {
+                    if (e is TargetInvocationException)
+                    {
+                        if (e.GetBaseException() is LoopExit)
+                        {
+                            running = false;
+                            SendResponse(new Dictionary<string, object>
+                            {
+                                { "error", 0 },
+                                { "result", "exiting" }
+                            });
+                            continue;
+                        }
+                        else if (e.GetBaseException() is ProtocolError)
+                        {
+                            SendResponse(new Dictionary<string, object>
+                            {
+                                { "error", ((ProtocolError)e.GetBaseException()).code },
+                                { "message", ((ProtocolError)e.GetBaseException()).message }
+                            });
+                            continue;
+                        }
+                    }
+
                     SendResponse(new Dictionary<string, object>
                     {
                         { "error", -1 },
