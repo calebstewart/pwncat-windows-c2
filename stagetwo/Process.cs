@@ -1,11 +1,13 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using static stagetwo.Protocol;
 
 namespace stagetwo
 {
     class Process
     {
-        public static void start(System.IO.StreamReader stdin)
+        public static Dictionary<string, object> start(string command)
         {
             IntPtr stdin_read, stdin_write;
             IntPtr stdout_read, stdout_write;
@@ -13,7 +15,6 @@ namespace stagetwo
             Win32.SECURITY_ATTRIBUTES pSec = new Win32.SECURITY_ATTRIBUTES();
             Win32.STARTUPINFO pInfo = new Win32.STARTUPINFO();
             Win32.PROCESS_INFORMATION childInfo = new Win32.PROCESS_INFORMATION();
-            System.String command = stdin.ReadLine();
 
             pSec.nLength = Marshal.SizeOf(pSec);
             pSec.bInheritHandle = 1;
@@ -21,20 +22,23 @@ namespace stagetwo
 
             if (!Win32.CreatePipe(out stdin_read, out stdin_write, ref pSec, Win32.BUFFER_SIZE_PIPE))
             {
-                System.Console.WriteLine("E:IN");
-                return;
+                throw new ProtocolError(Marshal.GetLastWin32Error(), "create stdin pipe failed");
             }
 
             if (!Win32.CreatePipe(out stdout_read, out stdout_write, ref pSec, Win32.BUFFER_SIZE_PIPE))
             {
-                System.Console.WriteLine("E:OUT");
-                return;
+                Win32.CloseHandle(stdin_read);
+                Win32.CloseHandle(stdin_write);
+                throw new ProtocolError(Marshal.GetLastWin32Error(), "create stdout pipe failed");
             }
 
             if (!Win32.CreatePipe(out stderr_read, out stderr_write, ref pSec, Win32.BUFFER_SIZE_PIPE))
             {
-                System.Console.WriteLine("E:ERR");
-                return;
+                Win32.CloseHandle(stdout_read);
+                Win32.CloseHandle(stdout_write);
+                Win32.CloseHandle(stdin_read);
+                Win32.CloseHandle(stdin_write);
+                throw new ProtocolError(Marshal.GetLastWin32Error(), "create stderr pipe failed");
             }
 
             pInfo.cb = Marshal.SizeOf(pInfo);
@@ -45,49 +49,66 @@ namespace stagetwo
 
             if (!Win32.CreateProcessW(null, command, IntPtr.Zero, IntPtr.Zero, true, 0, IntPtr.Zero, null, ref pInfo, out childInfo))
             {
-                System.Console.WriteLine("E:PROC");
-                return;
+                Win32.CloseHandle(stdin_read);
+                Win32.CloseHandle(stdin_write);
+                Win32.CloseHandle(stdout_read);
+                Win32.CloseHandle(stdout_write);
+                Win32.CloseHandle(stderr_read);
+                Win32.CloseHandle(stderr_write);
+                throw new Protocol.ProtocolError(Marshal.GetLastWin32Error(), "create process failed");
             }
 
             Win32.CloseHandle(stdin_read);
             Win32.CloseHandle(stdout_write);
             Win32.CloseHandle(stderr_write);
 
-            System.Console.WriteLine(childInfo.hProcess);
-            System.Console.WriteLine(stdin_write);
-            System.Console.WriteLine(stdout_read);
-            System.Console.WriteLine(stderr_read);
+            return new Dictionary<string, object>()
+            {
+                { "handle", childInfo.hProcess },
+                { "stdin", stdin_write },
+                { "stdout", stdout_read },
+                { "stderr", stderr_read }
+            };
         }
 
-        public static void poll(System.IO.StreamReader stdin)
+        public static Dictionary<string, object> poll(int iHandle)
         {
-            IntPtr hProcess = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
-            System.UInt32 result = Win32.WaitForSingleObject(hProcess, 0);
+            IntPtr hProcess = new IntPtr(iHandle);
+            UInt32 result = Win32.WaitForSingleObject(hProcess, 0);
+            UInt32 exit_code = 0;
+
+            if( result == 0xFFFFFFFF)
+            {
+                throw new ProtocolError(Marshal.GetLastWin32Error(), "wait for single object failed");
+            }
 
             if (result == 0x00000102L)
             {
-                System.Console.WriteLine("R");
-                return;
-            }
-            else if (result == 0xFFFFFFFF)
-            {
-                System.Console.WriteLine("E");
-                return;
+                return new Dictionary<string, object>()
+                {
+                    { "stopped", false }
+                };
             }
 
-            if (!Win32.GetExitCodeProcess(hProcess, out result))
+            if (!Win32.GetExitCodeProcess(hProcess, out exit_code))
             {
-                System.Console.WriteLine("E");
+                return new Dictionary<string, object>()
+                {
+                    { "stopped", true },
+                    { "code", null }
+                };
             }
 
-            System.Console.WriteLine(result);
+            return new Dictionary<string, object>()
+            {
+                { "stopped", true },
+                { "code", (int)exit_code }
+            };
         }
 
-        public static void kill(System.IO.StreamReader stdin)
+        public static void kill(int iHandle, int code)
         {
-            IntPtr hProcess = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
-            UInt32 code = System.UInt32.Parse(stdin.ReadLine());
-            Win32.TerminateProcess(hProcess, code);
+            Win32.TerminateProcess(new IntPtr(iHandle), (UInt32)code);
         }
 
     }

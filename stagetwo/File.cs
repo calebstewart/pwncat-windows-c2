@@ -11,10 +11,8 @@ namespace stagetwo
     class File
     {
 
-        public static void open(System.IO.StreamReader stdin)
+        public static Dictionary<string, object> open(string filename, string mode)
         {
-            System.String filename = stdin.ReadLine();
-            System.String mode = stdin.ReadLine();
             uint desired_access = 0;
             uint creation_disposition = Win32.OPEN_EXISTING;
             IntPtr handle;
@@ -33,82 +31,53 @@ namespace stagetwo
 
             if (handle == (new IntPtr(-1)))
             {
-                int error = Marshal.GetLastWin32Error();
-                System.Console.Write("E:");
-                System.Console.WriteLine(error);
-                return;
+                throw new Protocol.ProtocolError(Marshal.GetLastWin32Error(), "failed to open file");
             }
 
-            System.Console.WriteLine(handle);
+            return new Dictionary<string, object>()
+            {
+                { "handle", (UInt32)handle }
+            };
         }
 
-        public static void read(System.IO.StreamReader stdin)
+        public static Dictionary<string, object> read(int uiHandle, int count)
         {
-            System.String line;
-            IntPtr handle;
-            uint count;
+            IntPtr handle = new IntPtr(uiHandle);
+            byte[] buffer = new byte[count];
             uint nreceived;
 
-            line = stdin.ReadLine();
-            handle = new IntPtr(System.UInt32.Parse(line));
-            line = stdin.ReadLine();
-            count = System.UInt32.Parse(line);
-
-            byte[] buffer = new byte[count];
-
-            if (!Win32.ReadFile(handle, buffer, count, out nreceived, IntPtr.Zero))
+            if (!Win32.ReadFile(handle, buffer, (uint)count, out nreceived, IntPtr.Zero))
             {
-                System.Console.WriteLine("0");
-                return;
+                throw new Protocol.ProtocolError(Marshal.GetLastWin32Error(), "failed to read data + " + count.ToString());
             }
 
-            System.Console.WriteLine(nreceived);
-
-            using (Stream out_stream = System.Console.OpenStandardOutput())
-            {
-                out_stream.Write(buffer, 0, (int)nreceived);
-            }
-
-            return;
+            return new Dictionary<string, object>(){
+                { "data", Convert.ToBase64String(buffer, 0, (int)nreceived) }
+            };
         }
 
-        public static void write(System.IO.StreamReader stdin)
+        public static Dictionary<string, object> write(int iHandle, string szData)
         {
-            System.String line;
-            IntPtr handle;
+            IntPtr handle = new IntPtr(iHandle);
             uint nwritten;
-            System.IO.MemoryStream script;
+            byte[] data = Convert.FromBase64String(szData);
 
-            line = stdin.ReadLine();
-            handle = new IntPtr(System.UInt32.Parse(line));
 
-            try
+            if (!Win32.WriteFile(handle, data, (uint)data.Length, out nwritten, IntPtr.Zero))
             {
-                var stream = new System.IO.MemoryStream(System.Convert.FromBase64String(stdin.ReadLine()));
-                var gz = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
-                script = new System.IO.MemoryStream();
-                gz.CopyTo(script);
-            }
-            catch (Exception)
-            {
-                System.Console.WriteLine("E:DECODE");
-                return;
+                throw new Protocol.ProtocolError(Marshal.GetLastWin32Error(), "failed to write data");
             }
 
-            if (!Win32.WriteFile(handle, script.ToArray(), (uint)script.Length, out nwritten, IntPtr.Zero))
+            return new Dictionary<string, object>()
             {
-                System.Console.WriteLine("0");
-                return;
-            }
-
-            System.Console.WriteLine(nwritten);
-            return;
+                { "count", nwritten }
+            };
         }
 
-        public static void close(System.IO.StreamReader stdin)
+        public static Dictionary<string, object> close(int iHandle)
         {
-            IntPtr handle = new IntPtr(System.UInt32.Parse(stdin.ReadLine()));
-            Win32.CloseHandle(handle);
+            Win32.CloseHandle(new IntPtr(iHandle));
+            return new Dictionary<string, object>() { };
         }
 
     }

