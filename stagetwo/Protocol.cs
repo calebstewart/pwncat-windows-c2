@@ -99,7 +99,7 @@ namespace stagetwo
                     var methodName = (string)command[1];
 
                     // Resolve the type and method name, then invoke the method with the given arguments
-                    var result = (Dictionary<string, object>)GetType().Assembly.GetType("stagetwo." + typeName).GetMethod(
+                    var result = GetType().Assembly.GetType("stagetwo." + typeName).GetMethod(
                         methodName
                     ).Invoke(
                         null,

@@ -49,6 +49,7 @@
     <Reference Include="Microsoft.PowerShell.ConsoleHost" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Identity.cs" />
     <Compile Include="Protocol.cs" />
     <Compile Include="Reflection.cs" />
     <Compile Include="PowerShell.cs" />
